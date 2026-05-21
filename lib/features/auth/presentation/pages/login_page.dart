@@ -1,23 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/tokens.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
+import '../providers/login_provider.dart';
 
-class LoginPage extends StatefulWidget {
+class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  ConsumerState<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends ConsumerState<LoginPage> {
   int _tabIndex = 0; // 0=密码登录  1=验证码登录
   bool _obscurePassword = true;
 
   final _phoneCtrl = TextEditingController();
-  final _pwdCtrl = TextEditingController();
-  final _smsCtrl = TextEditingController();
+  final _pwdCtrl   = TextEditingController();
+  final _smsCtrl   = TextEditingController();
 
   @override
   void dispose() {
@@ -27,8 +31,30 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  void _onLoginTap() {
+    final phone    = _phoneCtrl.text.trim();
+    final notifier = ref.read(loginNotifierProvider.notifier);
+
+    if (_tabIndex == 0) {
+      final pwd = _pwdCtrl.text;
+      if (phone.isEmpty || pwd.isEmpty) {
+        EasyLoading.showToast('请填写手机号和密码');
+        return;
+      }
+      notifier.loginWithPassword(phone, pwd);
+    } else {
+      final code = _smsCtrl.text.trim();
+      if (phone.isEmpty || code.isEmpty) {
+        EasyLoading.showToast('请填写手机号和验证码');
+        return;
+      }
+      notifier.loginWithSms(phone, code);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 登录成功后由 GoRouter.refreshListenable 自动跳转首页，无需手动 context.go
     return AppScaffold(
       backgroundColor: Colors.white,
       body: Column(
@@ -63,7 +89,7 @@ class _LoginPageState extends State<LoginPage> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             GestureDetector(
-              onTap: () => context.push('/register'),
+              onTap: () => context.push(AppRoutes.register),
               behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: EdgeInsets.all(4.r),
@@ -284,14 +310,18 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // ── 登录按钮 ──────────────────────────────────────────────────────────
+  // ── 登录按钮（loading 时禁用 + 显示菊花圈）──────────────────────────
 
   Widget _buildLoginButton() {
+    final isLoading = ref.watch(loginNotifierProvider) is AsyncLoading;
+
     return Container(
       height: 48.h,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFF7800), Color(0xFFFF5000)],
+        gradient: LinearGradient(
+          colors: isLoading
+              ? [Colors.grey.shade400, Colors.grey.shade300]
+              : [const Color(0xFFFF7800), const Color(0xFFFF5000)],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
@@ -301,16 +331,25 @@ class _LoginPageState extends State<LoginPage> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(24.r),
-          onTap: () {},
+          onTap: isLoading ? null : _onLoginTap,
           child: Center(
-            child: Text(
-              '登录',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16.sp,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            child: isLoading
+                ? SizedBox(
+                    width: 20.r,
+                    height: 20.r,
+                    child: const CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : Text(
+                    '登录',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
           ),
         ),
       ),

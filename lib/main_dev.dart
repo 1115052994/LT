@@ -1,8 +1,6 @@
 import 'core/flavor/bootstrap.dart';
 import 'core/flavor/flavor.dart';
 
-// 默认开发环境入口——日常 `flutter run` 走此文件
-// 其他环境：flutter run -t lib/main_test.dart  / main_pre.dart / main_prod.dart
 void main() => bootstrap(
       flavor: Flavor.dev,
       baseUrl: 'https://dev-api.example.com',

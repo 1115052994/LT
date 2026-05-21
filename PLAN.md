@@ -17,7 +17,7 @@
 - **环境**：开发(dev) / 测试(test) / 预发(pre) / 生产(prod) **四套 Flavor**，dev/test/pre 三套日常并行使用，可同一设备共存
 - **权限收敛**：只申请 `INTERNET / ACCESS_NETWORK_STATE`；相机 / 相册 / 通知 / 位置等敏感权限不写入 manifest
 
-工作目录 `D:\XM\Lt` 当前为空，全新项目。
+工作目录：`lib/`（Flutter 项目根目录，Clean Architecture + Feature-first 结构）。
 
 ---
 
@@ -33,47 +33,79 @@
 
 ```
 lib/
-├── main.dart
-├── app.dart                      # MaterialApp + 路由 + 主题
+├── main.dart                         # 默认入口（指向 dev）
+├── main_dev.dart                     # dev 入口
+├── main_test.dart                    # test 入口
+├── main_pre.dart                     # pre 入口
+├── main_prod.dart                    # prod 入口
+├── app.dart                          # MaterialApp.router + 主题 + ScreenUtil 初始化
 ├── core/
+│   ├── auth/
+│   │   ├── auth_notifier.dart        # ChangeNotifier → GoRouter refreshListenable
+│   │   └── auth_service.dart         # Token 读写 + 过期跳转
+│   ├── constants/
+│   │   └── app_constants.dart        # 全局常量（tokenExpiredCode、超时、缓存阈值）
+│   ├── di/
+│   │   ├── app_providers.dart        # Riverpod Provider 注册
+│   │   └── navigation_holder.dart    # 全局导航函数（打破路由←→Provider 循环依赖）
+│   ├── error/
+│   │   └── failures.dart             # Failure / Exception 定义
+│   ├── flavor/
+│   │   ├── bootstrap.dart            # 统一启动入口（各 main_*.dart 调用）
+│   │   └── flavor.dart               # Flavor 枚举 + FlavorConfig
+│   ├── lifecycle/
+│   │   └── app_lifecycle_observer.dart
 │   ├── network/
-│   │   ├── dio_client.dart       # Dio 单例
-│   │   ├── interceptors/
-│   │   │   ├── auth_interceptor.dart       # token 注入 + 401 刷新
-│   │   │   ├── status_interceptor.dart     # HTTP code 统一处理（200/404/5xx）
-│   │   │   ├── logger_interceptor.dart
-│   │   │   └── error_interceptor.dart      # DioException → 业务 Failure
-│   │   └── api_response.dart     # 统一响应外壳 { code, msg, data }
-│   ├── storage/                  # secure_storage / shared_prefs 封装
-│   ├── router/                   # go_router 配置 + 登录守卫
-│   ├── theme/                    # ThemeData、颜色、字号
-│   ├── utils/                    # 工具函数、扩展
-│   ├── errors/                   # Failure / Exception 定义
-│   └── di/                       # get_it 注册
-├── config/
-│   ├── env.dart                  # dev / test / pre / prod 环境
-│   └── constants.dart
+│   │   ├── dio_client.dart           # Dio 工厂（装配拦截器链）
+│   │   ├── network_status.dart       # connectivity_plus 封装（Riverpod Provider）
+│   │   └── interceptors/
+│   │       ├── auth_interceptor.dart     # Token 注入
+│   │       ├── logger_interceptor.dart   # 完整请求/响应日志
+│   │       ├── status_interceptor.dart   # HTTP code + 业务 code 统一处理
+│   │       ├── error_interceptor.dart    # DioException → Failure
+│   │       └── retry_interceptor.dart    # GET 自动重试（指数退避，最多 3 次）
+│   ├── privacy/
+│   │   ├── privacy_gate.dart         # 首次启动隐私合规守门组件
+│   │   └── privacy_service.dart      # 隐私协议同意状态（SharedPreferences）
+│   ├── router/
+│   │   ├── app_router.dart           # GoRouter 单例 + 登录守卫
+│   │   └── app_routes.dart           # 路由路径常量
+│   ├── storage/                      # 预留（目前由 secure_storage / shared_prefs 直接使用）
+│   ├── theme/
+│   │   ├── app_theme.dart            # ThemeData
+│   │   └── tokens.dart               # 颜色 / 字号 / 间距 / 圆角 token
+│   └── utils/
+│       ├── countdown_timer.dart      # 倒计时（wall-clock 补偿后台时间）
+│       ├── money_utils.dart          # Decimal 金额格式化
+│       └── platform_aware.dart       # PlatformAware（替代散写 Platform.isIOS）
 ├── features/
-│   ├── auth/                     # 登录/注册（账号 + 短信）
-│   ├── home/                     # 首页、推荐、轮播
-│   ├── product/                  # 列表、详情、搜索
-│   ├── category/                 # 分类、筛选
-│   ├── cart/                     # 购物车
-│   ├── order/                    # 下单、订单列表、详情、售后
+│   ├── auth/                         # 登录/注册（账号 + 短信）
+│   │   ├── data/                     # 数据层（DataSource、Repository 实现、DTO）
+│   │   ├── domain/                   # 领域层（Repository 接口、Entity）
+│   │   └── presentation/             # 表现层（Page、Provider）
+│   ├── home/                         # 首页
+│   ├── product/                      # 商品列表、详情、搜索
+│   ├── category/                     # 分类、筛选
+│   ├── cart/                         # 购物车
+│   ├── order/                        # 下单、订单列表、详情、售后
 │   ├── payment/
-│   │   ├── alipay_service.dart   # 本期实现
-│   │   └── payment_gateway.dart  # 统一抽象接口（暂只支付宝）
-│   ├── address/                  # 收货地址
-│   ├── coupon/                   # 优惠券
-│   ├── user/                     # 个人中心
-│   └── message/                  # 消息中心
+│   │   └── data/
+│   │       ├── payment_gateway.dart  # 统一支付抽象接口
+│   │       └── alipay_service.dart   # 支付宝实现（接入 tobias SDK 时替换桩代码）
+│   ├── address/                      # 收货地址
+│   ├── coupon/                       # 优惠券
+│   ├── user/                         # 个人中心
+│   └── message/                      # 消息中心
 ├── shared/
-│   ├── widgets/
-│   │   ├── empty_state.dart      # 统一空数据组件（重点）
-│   │   ├── error_state.dart
-│   │   └── loading_state.dart
-│   └── extensions/
-└── l10n/                         # 中文为主，国际化预留
+│   └── widgets/
+│       ├── app_button.dart               # 统一按钮（内置 500ms 防抖）
+│       ├── app_network_image.dart        # 统一图片（强制 memCacheWidth）
+│       ├── app_scaffold.dart             # 统一 Scaffold（强制 SafeArea）
+│       ├── app_webview.dart              # H5 容器（纯展示，无 JS Bridge）
+│       ├── debug_panel.dart              # 开发者面板（dev/test 专用）
+│       ├── double_back_exit_wrapper.dart # Android 双击退出
+│       └── empty_state.dart             # 统一空数据组件
+└── l10n/                             # 中文为主，国际化预留
 ```
 
 ---
@@ -207,55 +239,58 @@ lib/
 ```dart
 // lib/core/network/interceptors/logger_interceptor.dart
 class AppLoggerInterceptor extends Interceptor {
-  final _stopwatchKey = Object();
+  static const _swKey = 'logger_stopwatch';
+
+  // dev/test：全量日志；pre：仅错误；prod：完全关闭
+  bool get _enabled => FlavorConfig.isLogEnabled;   // prod → false
+  bool get _verbose => FlavorConfig.isLogVerbose;   // dev/test → true
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    options.extra[_stopwatchKey] = Stopwatch()..start();
-    if (!_enabled) return handler.next(options);
-    final reqId = options.hashCode.toRadixString(16);
-    debugPrint('''
+    options.extra[_swKey] = Stopwatch()..start();
+    if (_enabled && _verbose) {
+      final reqId = options.hashCode.toRadixString(16);
+      debugPrint('''
 ╔══ REQ #$reqId ══════════════════════════════
 ║ ${options.method}  ${options.uri}
 ║ Headers: ${_maskHeaders(options.headers)}
-║ Body:    ${_prettyJson(options.data, max: 10240)}
+║ Body:    ${_prettyJson(options.data, max: AppConstants.logBodyMaxBytes)}
 ╚════════════════════════════════════════════''');
+    }
     handler.next(options);
   }
 
   @override
   void onResponse(Response res, ResponseInterceptorHandler handler) {
-    final sw = res.requestOptions.extra[_stopwatchKey] as Stopwatch?;
+    final sw = res.requestOptions.extra[_swKey] as Stopwatch?;
     sw?.stop();
-    if (!_enabled) return handler.next(res);
-    final reqId = res.requestOptions.hashCode.toRadixString(16);
-    debugPrint('''
+    if (_enabled && _verbose) {
+      final reqId = res.requestOptions.hashCode.toRadixString(16);
+      debugPrint('''
 ╔══ RES #$reqId  ${sw?.elapsedMilliseconds}ms ═══════════════
 ║ HTTP ${res.statusCode}  ${res.requestOptions.uri}
-║ Body: ${_prettyJson(res.data, max: 51200)}
+║ Body: ${_prettyJson(res.data, max: AppConstants.logRespMaxBytes)}
 ╚════════════════════════════════════════════''');
+    }
     handler.next(res);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    final sw = err.requestOptions.extra[_stopwatchKey] as Stopwatch?;
+    final sw = err.requestOptions.extra[_swKey] as Stopwatch?;
     sw?.stop();
-    if (!_enabled) return handler.next(err);
-    final reqId = err.requestOptions.hashCode.toRadixString(16);
-    debugPrint('''
+    if (_enabled) {   // pre 也打错误，_verbose 不参与
+      final reqId = err.requestOptions.hashCode.toRadixString(16);
+      debugPrint('''
 ╔══ ❌ ERR #$reqId  ${sw?.elapsedMilliseconds}ms ═══════════════
 ║ ${err.type}  ${err.requestOptions.uri}
 ║ HTTP ${err.response?.statusCode}
 ║ Message: ${err.message}
-║ Body: ${_prettyJson(err.response?.data, max: 10240)}
-║ Stack: ${err.stackTrace}
+║ Body: ${_prettyJson(err.response?.data, max: AppConstants.logBodyMaxBytes)}
 ╚════════════════════════════════════════════''');
+    }
     handler.next(err);
   }
-
-  // 日志开关：dev/test 全开；pre 只打错误；prod 关
-  bool get _enabled => FlavorConfig.current.flavor != Flavor.prod;
 
   // 脱敏：Authorization / Cookie 部分隐藏
   Map _maskHeaders(Map h) => {
@@ -289,33 +324,41 @@ class AppLoggerInterceptor extends Interceptor {
 
 ```dart
 // lib/core/network/interceptors/status_interceptor.dart
+// TOKEN_EXPIRED_CODE 在 AppConstants 单点定义，禁止在此处硬编码
 class StatusInterceptor extends Interceptor {
-  static const int tokenExpiredCode = 401001;  // ← 与后端确认后填入
+  final AuthService _authService;
+
+  StatusInterceptor(this._authService);
 
   @override
   void onResponse(Response res, ResponseInterceptorHandler handler) {
-    final code = res.statusCode ?? 0;
-    if (code == 200) {
-      final body = res.data as Map<String, dynamic>;
-      final bizCode = body['code'] as int;
+    final httpCode = res.statusCode ?? 0;
+    if (httpCode == 200) {
+      final body = res.data;
+      // 非 Map（如下载文件）直接透传
+      if (body is! Map<String, dynamic>) return handler.next(res);
+      final bizCode = (body['code'] as num?)?.toInt() ?? 0;
 
-      // 1. 成功
+      // 1. 业务成功
       if (bizCode == 0) return handler.next(res);
 
-      // 2. Token 过期：静默清 token + 跳登录，不弹 Toast
-      if (bizCode == tokenExpiredCode) {
-        getIt<AuthService>().handleTokenExpired();   // 清 token + 跳登录
+      // 2. Token 过期：清 token + 跳登录，不弹 Toast
+      if (bizCode == AppConstants.tokenExpiredCode) {
+        _authService.handleTokenExpired();
         return handler.reject(DioException(
           requestOptions: res.requestOptions,
+          response: res,
           error: const TokenExpiredFailure(),
         ));
       }
 
       // 3. 其他业务错误：Toast + 抛 BusinessFailure
-      EasyLoading.showToast(body['msg'] ?? '操作失败');
+      final msg = body['msg'] as String? ?? '操作失败';
+      EasyLoading.showToast(msg);
       return handler.reject(DioException(
         requestOptions: res.requestOptions,
-        error: BusinessFailure(bizCode, body['msg']),
+        response: res,
+        error: BusinessFailure(bizCode, msg),
       ));
     }
     handler.next(res);
@@ -323,18 +366,24 @@ class StatusInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    final msg = switch (err.response?.statusCode) {
-      401 => null,                       // 兜底，正常应走业务 code
+    final statusCode = err.response?.statusCode;
+    // 已经是 Failure（上面 reject 出来的）不重复处理
+    if (err.error is Failure) return handler.next(err);
+
+    final msg = switch (statusCode) {
+      401 => null,                          // 兜底，正常应走业务 code
       403 => '无权限访问',
       404 => '请求的资源不存在',
-      >= 500 && < 600 => '服务器开小差了，请稍后重试',
-      _ when err.type == DioExceptionType.connectionTimeout => '网络连接超时',
-      _ when err.type == DioExceptionType.connectionError => '网络连接失败，请检查网络',
-      _ => '请求失败',
+      int s when s >= 500 && s < 600 => '服务器开小差了，请稍后重试',
+      _ => switch (err.type) {
+          DioExceptionType.connectionTimeout ||
+          DioExceptionType.sendTimeout ||
+          DioExceptionType.receiveTimeout => '网络连接超时',
+          DioExceptionType.connectionError => '网络连接失败，请检查网络',
+          _ => null,
+        },
     };
-    if (err.response?.statusCode == 401) {
-      getIt<AuthService>().handleTokenExpired();
-    }
+    if (statusCode == 401) _authService.handleTokenExpired();
     if (msg != null) EasyLoading.showToast(msg);
     handler.next(err);
   }
@@ -476,14 +525,24 @@ class AppScaffold extends StatelessWidget {
 
 #### 6.2.1 适配基础
 - **`flutter_screenutil`** 设计稿基准 `375 × 812`（iPhone X 系列，与设计师对齐）
-- `main.dart`：
+- `app.dart` 的 `MaterialApp.router.builder` 回调内初始化（此时 `context` 已有真实 `MediaQuery`，`.sp/.w/.h` 单位正确）：
   ```dart
-  ScreenUtilInit(
-    designSize: const Size(375, 812),
-    minTextAdapt: true,         // 文字最小尺寸自适应
-    splitScreenMode: true,      // 折叠屏分屏适配
-    builder: (_, __) => const App(),
-  );
+  // lib/app.dart
+  builder: EasyLoading.init(
+    builder: (context, child) {
+      ScreenUtil.init(context,
+        designSize: const Size(375, 812),
+        minTextAdapt: true,      // 文字最小尺寸自适应
+        splitScreenMode: true,   // 折叠屏分屏适配
+      );
+      return MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(1.0),  // 禁止跟随系统字体缩放
+        ),
+        child: child!,
+      );
+    },
+  ),
   ```
 
 #### 6.2.2 单位强制规则
@@ -745,13 +804,16 @@ class AppNetworkImage extends StatelessWidget {
 监听系统低内存事件主动释放：
 
 ```dart
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+// lib/core/lifecycle/app_lifecycle_observer.dart
+class AppLifecycleObserver with WidgetsBindingObserver {
   @override
   void didHaveMemoryPressure() {
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
   }
 }
+// bootstrap.dart 中注册：
+// WidgetsBinding.instance.addObserver(AppLifecycleObserver());
 ```
 
 ### 8.4 防泄漏工具链
@@ -905,7 +967,7 @@ void main() {
       debugPrint('Platform error: $e\n$st');
       return true;
     };
-    runApp(const MyApp());
+    runApp(const PrivacyGate(child: App()));
   }, (e, st) => debugPrint('Zone error: $e\n$st'));
 }
 ```
@@ -1164,8 +1226,8 @@ class Err<T> extends Result<T> { final Failure failure; ... }
 | 支付宝 | 沙箱 | 沙箱 | 正式（小额） | 正式 |
 
 实现：
-- 环境配置文件：`env/dev.json` / `env/test.json` / `env/pre.json` / `env/prod.json`，存 `BASE_URL`、`LOG_LEVEL`、`ALIPAY_APP_ID` 等
-- 启动注入：`flutter run --flavor dev -t lib/main_dev.dart --dart-define-from-file=env/dev.json`
+- 环境配置硬编码在各 `main_*.dart` 入口文件，通过 `FlavorConfig.setup()` 注入（baseUrl、alipayAppId）
+- 启动方式：`flutter run --flavor dev -t lib/main_dev.dart`
 - iOS：Xcode 配置 4 个 Scheme + 4 份 xcconfig
 - Android：`build.gradle` 中 `productFlavors { dev { ... } test { ... } pre { ... } prod { ... } }`
 - 四个 entry：`main_dev.dart` / `main_test.dart` / `main_pre.dart` / `main_prod.dart`，统一 `→ bootstrap(Flavor.X)`
@@ -1179,13 +1241,28 @@ class FlavorConfig {
   final Flavor flavor;
   final String baseUrl;
   final String alipayAppId;
-  final LogLevel logLevel;
-  final bool allowProxy;
 
-  static late FlavorConfig current;
-  static bool get isProd => current.flavor == Flavor.prod;
-  static bool get isPre => current.flavor == Flavor.pre;
+  static FlavorConfig? _current;
+
+  const FlavorConfig._({required this.flavor, required this.baseUrl, required this.alipayAppId});
+
+  static void setup({required Flavor flavor, required String baseUrl, String alipayAppId = ''}) {
+    _current = FlavorConfig._(flavor: flavor, baseUrl: baseUrl, alipayAppId: alipayAppId);
+  }
+
+  static FlavorConfig get current {
+    assert(_current != null, 'FlavorConfig.setup() must be called in bootstrap');
+    return _current!;
+  }
+
+  static bool get isProd      => current.flavor == Flavor.prod;
   static bool get isDevOrTest => current.flavor == Flavor.dev || current.flavor == Flavor.test;
+  static bool get isLogEnabled => _current?.logEnabled ?? kDebugMode;
+  static bool get isLogVerbose => _current?.logVerbose ?? kDebugMode;
+
+  // 日志控制：dev/test 全量，pre 仅错误，prod 完全关闭
+  bool get logEnabled => flavor != Flavor.prod;
+  bool get logVerbose => flavor == Flavor.dev || flavor == Flavor.test;
 }
 ```
 
@@ -1254,7 +1331,7 @@ class FlavorConfig {
 // lib/core/theme/tokens.dart - 颜色部分
 class AppColors {
   // 品牌
-  static const primary = Color(0xFFFF6600);
+  static const primary = Color(0xFFFF5000);
   static const primaryLight = Color(0xFFFFE5D6);
 
   // 文字
@@ -1495,8 +1572,8 @@ class AppColors {
 - `lib/shared/widgets/app_scaffold.dart`（**本期重点** — 统一 SafeArea/状态栏）
 - `lib/shared/widgets/app_network_image.dart`（**本期重点** — 强制 memCacheWidth）
 - `lib/shared/widgets/app_webview.dart`（**本期重点** — H5 纯展示容器，无 JS Bridge）
-- `lib/features/payment/payment_gateway.dart`
-- `lib/features/payment/alipay_service.dart`
+- `lib/features/payment/data/payment_gateway.dart`
+- `lib/features/payment/data/alipay_service.dart`
 - `lib/core/privacy/privacy_gate.dart`（首次启动隐私协议守门）
 - `lib/core/permission/permission_service.dart`（场景化权限申请 + 解释弹窗）
 - `lib/core/error/global_error_handler.dart`（`runZonedGuarded` 三层异常捕获）
@@ -1509,7 +1586,6 @@ class AppColors {
 - `lib/core/network/interceptors/logger_interceptor.dart`（**本期重点** — 完整链路日志 + 脱敏）
 - `lib/core/flavor/flavor.dart`、`lib/core/flavor/bootstrap.dart`
 - `lib/main_dev.dart` / `lib/main_test.dart` / `lib/main_pre.dart` / `lib/main_prod.dart`
-- `env/dev.json` / `env/test.json` / `env/pre.json` / `env/prod.json`
 - `lib/features/account/account_deletion_page.dart`（注销账号合规入口）
 - `android/app/build.gradle`（productFlavors 配置）
 - `ios/Runner/Info.plist`（权限说明、URL Schemes、ATS）
